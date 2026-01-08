@@ -181,13 +181,13 @@ notification.default_config = {
 ---
 ---@param item Item
 function notification.set_content_key(item)
-    item.content_key = item.message .. " " .. (item.annote and item.annote or string.char(0))
+  item.content_key = item.message .. " " .. (item.annote and item.annote or string.char(0))
 end
 
 ---@options notification [[
 ---@protected
 --- Notification options
-notification.options        = {
+notification.options = {
   --- How frequently to update and render notifications
   ---
   --- Measured in Hertz (frames per second).
@@ -364,7 +364,6 @@ notification.poller = poll.Poller {
   poll = function(self)
     notification.model.tick(self:now(), state)
 
-    -- TODO: if not modified, don't re-render
     local lines, width = notification.view.render(self:now(), state.groups)
 
     if #lines > 0 then

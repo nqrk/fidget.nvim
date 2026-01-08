@@ -15,6 +15,47 @@ local M      = {}
 local logger = require("fidget.logger")
 local poll   = require("fidget.poll")
 
+--- Cache used during rendering of notifications.
+---
+---@class Cache
+---@field group_header    table<Display, CachedHdr>
+---@field group_separator CacheSep
+---@field render_item     table<Item|any, CachedItem>
+---@field render_width    integer
+local cache  = {}
+
+--- Cached rendered lines: reused when `count` matches the current item group count.
+---
+---@class CachedItem
+---@field it    NotificationLine[]|nil
+---@field width integer
+---@field count integer
+
+--- Cached rendered lines: reused when `icon` matches the current group header icon.
+---
+---@class CachedHdr
+---@field hdr   NotificationLine[]|nil
+---@field width integer
+---@field icon  string
+
+--- Cached rendered lines: reused when `group_separator` is set.
+---
+---@class CacheSep
+---@field sep   NotificationLine[]|nil
+---@field width integer
+
+---@return Cache
+function M.cache() return cache end
+
+--- Deletes rendered lines from the cache.
+---
+---@param item Item
+local function del_cached(item)
+  if cache.render_item and cache.render_item[item.content_key] then
+    cache.render_item[item.content_key] = nil
+  end
+end
+
 --- The abstract state of the notifications subsystem.
 ---@class State
 ---@field groups          Group[]         active notification groups
@@ -345,6 +386,7 @@ function M.tick(now, state)
         table.insert(new_items, item)
       else
         add_removed(state, now, group, item)
+        del_cached(item)
       end
     end
     if #group.items > 0 then

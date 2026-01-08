@@ -5,6 +5,9 @@ local M = {}
 
 local window = require("fidget.notification.window")
 
+---@type Cache
+local cache = require("fidget.notification.model").cache()
+
 --- A list of highlighted tokens.
 ---@class NotificationLine : NotificationToken[]
 
@@ -203,7 +206,6 @@ function M.render_group_separator()
     return nil, 0
   end
   return { Line(Token(line, M.options.group_separator_hl)) }, line_width(line)
-  -- TODO: cache the return value, this never changes
 end
 
 --- Render the header of a group, containing group name and icon.
@@ -233,7 +235,7 @@ function M.render_group_header(now, group)
   if name_tok and icon_tok then
     ---@cast group_name string
     ---@cast group_icon string
-    local sep_tok = Token(M.options.icon_separator) -- TODO: cache this
+    local sep_tok = Token(M.options.icon_separator)
     local width = line_width(group_name, group_icon, M.options.icon_separator)
     if group.config.icon_on_left then
       return { Line(icon_tok, sep_tok, name_tok) }, width
@@ -328,7 +330,7 @@ function M.render_item(item, config, count)
       item_width = math.max(item_width, line_width(line[1], sep_tok[1], ann_tok[1]))
 
       if M.options.align == "annote" then
-        -- Refund available msg_width with length of annote + sepeparator
+        -- Refund available msg_width with length of annote + separator
         msg_width, ann_tok = msg_width + strwidth(sep_tok[1], ann_tok[1]), nil
       else -- M.options.align == "message"
         -- Replace annote token with equivalent width of space
@@ -421,16 +423,50 @@ function M.render(now, groups)
   local chunks = {}
   local max_width = 0
 
+  cache.group_header = cache.group_header or {}
+  cache.render_item = cache.render_item or {}
+
+  local size = vim.opt.columns:get()
+
+  -- Force rendering when the length of the window change
+  local resized = cache.render_width and cache.render_width ~= size or false
+
+  if not cache.render_width or resized then
+    cache.render_width = size
+  end
+
   for idx, group in ipairs(groups) do
     if idx ~= 1 then
-      local sep, sep_width = M.render_group_separator()
+      local sep, sep_width
+      if cache.group_separator and not resized then
+        sep = cache.group_separator.sep
+        sep_width = cache.group_separator.width
+      else
+        sep, sep_width = M.render_group_separator()
+        cache.group_separator = { sep = sep, width = sep_width }
+      end
       if sep then
         table.insert(chunks, sep)
         max_width = math.max(max_width, sep_width)
       end
     end
 
-    local hdr, hdr_width = M.render_group_header(now, group)
+    local icon = group.config.icon
+    if type(icon) == "function" then
+      icon = group.config.icon(now, group.items)
+    end
+    local hdr, hdr_width
+    if cache.group_header
+      and not resized
+      and cache.group_header[group.config.name]
+      and cache.group_header[group.config.name].icon == icon
+    then
+      hdr = cache.group_header[group.config.name].hdr
+      hdr_width = cache.group_header[group.config.name].width
+    else
+      hdr, hdr_width = M.render_group_header(now, group)
+      cache.group_header[group.config.name] = { hdr = hdr, width = hdr_width, icon = icon }
+    end
     if hdr then
       table.insert(chunks, hdr)
       max_width = math.max(max_width, hdr_width)
@@ -443,7 +479,20 @@ function M.render(now, groups)
         break
       end
 
-      local it, it_width = M.render_item(item, group.config, counts[item.content_key or item])
+      local key = item.content_key or item
+
+      local it, it_width
+      if cache.render_item[key]
+        and not resized
+        and counts[key] == cache.render_item[key].count
+        and cache.render_width == size
+      then
+        it = cache.render_item[key].it
+        it_width = cache.render_item[key].width
+      else
+        it, it_width = M.render_item(item, group.config, counts[key])
+        cache.render_item[key] = { it = it, width = it_width, count = counts[key] }
+      end
       if it then
         table.insert(chunks, it)
         max_width = math.max(max_width, it_width)
