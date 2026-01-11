@@ -175,6 +175,46 @@ local function line_width(...)
   return w == 0 and w or w + line_margin()
 end
 
+--- Tokenize a string into a list of tokens.
+---
+--- A token is a contiguous sequence of alphanumeric characters or an individual non-space character.
+--- Ignores consecutives whitespace.
+---
+---                     scol     ecol    word
+---@alias Token table<integer, integer, string>
+---
+---@param source string
+---@return Token[]
+local function Tokenize(source)
+  local pos = 1
+  local res = {}
+
+  while pos <= #source do
+    local scol, ecol, w = source:find("(%w+)", pos)
+
+    if not scol then
+      for i = pos, #source do
+        local c = source:sub(i, i)
+        if c:match("%S") then
+          table.insert(res, { i, i, c })
+        end
+      end
+      break
+    end
+    for i = pos, scol - 1 do
+      local c = source:sub(i, i)
+      if c:match("%S") then
+        table.insert(res, { i, i, c })
+      end
+    end
+    table.insert(res, { scol, ecol, w })
+    pos = ecol + 1
+  end
+  return res
+end
+
+--- Pack an arbitrary text and its highlight inside a notification token.
+---
 ---@param text string the text in this token
 ---@param ... string  highlights to apply to text
 ---@return NotificationToken
@@ -185,6 +225,8 @@ local function Token(text, ...)
   return { text, { window.no_blend_hl, ... } }
 end
 
+--- Pack a notification token inside margin and returns a notification line.
+---
 ---@param ... NotificationToken
 ---@return NotificationLine
 local function Line(...)
@@ -196,6 +238,34 @@ local function Line(...)
   local line = { margin, ... }
   line[#line + 1] = margin
   return line
+end
+
+--- Insert an annote or indent associated content line.
+---
+---@param line   table
+---@param width  integer
+---@param annote NotificationToken
+---@param first  boolean
+---@return table   line
+---@return integer width
+local function Annote(line, width, annote, sep, first)
+  if not annote then
+    return line, width
+  end
+  if first then
+    annote[1] = sep .. annote[1]
+    table.insert(line, annote)
+
+    width = width + line_width(annote[1])
+  else
+    -- Indent messages longer than a single line (see notification.view.align)
+    if M.options.align == "message" then
+      table.insert(line, Token(string.rep(sep, #annote[1])))
+
+      width = width + #annote[1]
+    end
+  end
+  return line, width
 end
 
 ---@return NotificationLine[]|nil lines
@@ -289,125 +359,66 @@ function M.render_item(item, config, count)
     return nil, 0
   end
 
-  local lines, item_width = {}, 0
-
-  local ann_tok = item.annote and Token(item.annote, item.style)
-  local sep_tok = Token(config.annote_separator or " ")
-
-  -- How much space is available to message lines
-  local msg_width = window.max_width()
-      - line_margin() -- adjusted for line margin
-      - 1             -- adjusted for ext_mark margin
-
-  local presplit_char, postsplit_char = nil, nil
-  if M.options.reflow == "hyphenate" then
-    presplit_char = "-"
-  elseif M.options.reflow == "ellipsis" then
-    presplit_char = "…"
-    postsplit_char = "…"
+  local hl = {}
+  if not is_multigrid_ui then
+    table.insert(hl, window.no_blend_hl)
   end
 
-  if ann_tok and msg_width ~= math.huge and M.options.reflow then
-    -- If we need annote, adjust remaining available width for message line(s)
-    local ann_width = strwidth(sep_tok[1], ann_tok[1])
-    if ann_width > msg_width then
-      -- No room for annote + item line. Put annote on line of its own.
-      table.insert(lines, Line(ann_tok))
-      item_width = line_width(ann_tok[1])
-      -- Pretend there was no annote to begin with.
-      ann_tok = nil
-    else
-      -- Reduce available space for message line(s); that will get printed next
-      -- to annote and sep in first iteration of loop below.
-      msg_width = msg_width - ann_width
-    end
-  end
-
-  local function insert(line)
-    if ann_tok then
-      -- Need to emite annote token in this line
-      table.insert(lines, Line(line, sep_tok, ann_tok))
-      item_width = math.max(item_width, line_width(line[1], sep_tok[1], ann_tok[1]))
-
-      if M.options.align == "annote" then
-        -- Refund available msg_width with length of annote + separator
-        msg_width, ann_tok = msg_width + strwidth(sep_tok[1], ann_tok[1]), nil
-      else -- M.options.align == "message"
-        -- Replace annote token with equivalent width of space
-        ann_tok = Token(string.rep(" ", strwidth(ann_tok[1])))
-      end
-    else
-      table.insert(lines, Line(line))
-      item_width = math.max(item_width, line_width(line[1]))
-    end
-  end
-
-  for whole_line in vim.gsplit(msg, "\n", { plain = true, trimempty = true }) do
-    local lwidth = strwidth(whole_line)
-    if msg_width >= lwidth then
-      -- The entire line fits into the available space; insert it as is.
-      -- Note that we do not trim it either.
-      insert(Token(whole_line))
-    elseif not M.options.reflow then
-      -- If the message is wider than available space but we are explicitly
-      -- asked not to reflow, then just truncate it.
-      insert(Token(vim.fn.strcharpart(whole_line, 0, msg_width, true)))
-    else
-      local split_begin, postsplit = 0, nil
-      whole_line = vim.fn.trim(whole_line)
-      while lwidth > 0 do
-        local split_len, presplit = msg_width, nil
-        if postsplit then
-          split_len = split_len - 1
-        end
-
-        if lwidth > split_len
-            and not whitespace(whole_line, split_begin + split_len)
-            and not whitespace(whole_line, split_begin + split_len - 1)
-        then
-          if whitespace(whole_line, split_begin + split_len - 2) then
-            -- Avoid "split w/ord"
-            split_len = split_len - 1
-          elseif presplit_char then
-            if whitespace(whole_line, split_begin + split_len - 3) then
-              -- Avoid "split w-/ord"
-              split_len = split_len - 2
-            else
-              split_len = split_len - 1
-              presplit = presplit_char
-            end
-          end
-        end
-
-        local line = vim.fn.strcharpart(whole_line, split_begin, split_len, true)
-        line = vim.fn.trim(line)
-        if postsplit then
-          line = postsplit .. line
-        end
-        if presplit then
-          line = line .. presplit
-          postsplit = postsplit_char
-        else
-          postsplit = nil
-        end
-        insert(Token(line))
-        split_begin = split_begin + split_len
-        lwidth = lwidth - split_len
-      end
-    end
-  end
-
-  if #lines == 0 then
-    if ann_tok then
-      -- The message is an empty string, but there's an annotation to render.
-      return { Line(ann_tok) }, line_width(item.annote)
-    else
-      -- Don't render empty messages
-      return nil, 0
-    end
+  if M.options.normal_hl ~= "Normal" and M.options.normal_hl ~= "" then
+    table.insert(hl, M.options.normal_hl)
   else
-    return lines, item_width
+    table.insert(hl, "Normal") -- default
   end
+
+  local width = 0
+  local max_width = vim.opt.columns:get() - line_margin() - 4
+
+  local tokens = {}
+  local annote = item.annote and Token(item.annote, item.style)
+  local sep = config.annote_separator or " "
+
+  for s in vim.gsplit(msg, "\n", { plain = true, trimempty = true }) do
+    local line = {}
+    local line_ptr = 0
+    local prev_end = 0
+    local next_start = 0
+
+    for _, token in ipairs(Tokenize(s)) do
+      if not token then
+        break
+      end
+      local spacing = token[1] - prev_end
+
+      -- Check if the line would overflow notification window if added as it is
+      if line_ptr + #token[3] + spacing >= max_width - (annote and line_width(annote[1]) or 0) then
+        if annote then
+          line, width = Annote(line, width, annote, sep, #tokens == 0)
+        end
+        table.insert(tokens, Line(unpack(line))) -- push to newline
+        line = {}
+        line_ptr = 0
+        next_start = token[1]
+      end
+      table.insert(line, {
+        scol = (token[1] == 1 and 0 or token[1]) - next_start,
+        ecol = token[2] - next_start + 1,
+        text = token[3]
+      })
+      prev_end = token[2] + 1
+      line_ptr = line_ptr + #token[3] + spacing
+
+      width = math.max(width, line_ptr + line_margin())
+    end
+    if annote then
+      line, width = Annote(line, width, annote, sep, #tokens == 0)
+    end
+    table.insert(tokens, Line(unpack(line)))
+  end
+  -- The message is an empty string but there's an annotation to render
+  if #tokens == 0 and annote then
+    tokens = { Line(annote) }
+  end
+  return tokens, width
 end
 
 --- Render notifications into lines and highlights.
@@ -457,9 +468,9 @@ function M.render(now, groups)
     end
     local hdr, hdr_width
     if cache.group_header
-      and not resized
-      and cache.group_header[group.config.name]
-      and cache.group_header[group.config.name].icon == icon
+        and not resized
+        and cache.group_header[group.config.name]
+        and cache.group_header[group.config.name].icon == icon
     then
       hdr = cache.group_header[group.config.name].hdr
       hdr_width = cache.group_header[group.config.name].width
@@ -483,9 +494,9 @@ function M.render(now, groups)
 
       local it, it_width
       if cache.render_item[key]
-        and not resized
-        and counts[key] == cache.render_item[key].count
-        and cache.render_width == size
+          and not resized
+          and counts[key] == cache.render_item[key].count
+          and cache.render_width == size
       then
         it = cache.render_item[key].it
         it_width = cache.render_item[key].width

@@ -583,28 +583,42 @@ function M.set_lines(lines, width)
   local empty_lines = vim.tbl_map(function() return "" end, lines)
   vim.api.nvim_buf_set_lines(buffer_id, 0, -1, false, empty_lines)
 
-  for iline, line in ipairs(lines) do
+  for index, line in ipairs(lines) do
+    local prev_ecol = 0
+    local chunk = {}
+
+    for _, t in ipairs(line) do
+      if t.text then
+        if prev_ecol < t.scol then
+          table.insert(chunk, { string.rep(" ", t.scol - prev_ecol) })
+        end
+        table.insert(chunk, { t.text, t.hl })
+        prev_ecol = t.ecol
+      else
+        table.insert(chunk, t) -- backward compatibility
+      end
+    end
+
     if vim.fn.has("nvim-0.11.0") == 1 then
-      vim.api.nvim_buf_set_extmark(buffer_id, namespace_id, iline - 1, 0, {
-        virt_text = line,
+      vim.api.nvim_buf_set_extmark(buffer_id, namespace_id, index - 1, 0, {
+        virt_text = chunk,
         virt_text_pos = "eol_right_align",
       })
     else
       -- pre-0.11.0: eol_right_align was only introduced in 0.11.0;
       -- without it we need to compute and add the padding ourselves
       local len, padded = 0, { {} }
-      for _, tok in ipairs(line) do
-        len = len + vim.fn.strwidth(tok[1]) +
-            vim.fn.count(tok[1], "\t") * math.max(0, M.options.tabstop - 1)
+      for _, tok in ipairs(chunk) do
+        len = len + vim.fn.strwidth(tok[1]) + vim.fn.count(tok[1], "\t") * math.max(0, M.options.tabstop - 1)
         table.insert(padded, tok)
       end
       local pad_width = math.max(0, width - len)
       if pad_width > 0 then
         padded[1] = { string.rep(" ", pad_width), {} }
       else
-        padded = line
+        padded = chunk
       end
-      vim.api.nvim_buf_set_extmark(buffer_id, namespace_id, iline - 1, 0, {
+      vim.api.nvim_buf_set_extmark(buffer_id, namespace_id, index - 1, 0, {
         virt_text = padded,
         virt_text_pos = "eol",
       })
