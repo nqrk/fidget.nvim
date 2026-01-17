@@ -73,7 +73,7 @@ end
 ---@class HistoryExtra
 ---@field removed   boolean
 ---@field group_key Key
----@field group_name string|nil
+---@field group_name string|false|nil
 ---@field group_icon string|nil
 
 --- Get the notification group indexed by group_key; create one if none exists.

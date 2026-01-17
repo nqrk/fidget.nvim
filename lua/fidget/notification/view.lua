@@ -1,6 +1,5 @@
 --- Helper methods used to render notification model elements into views.
 ---
---- TODO: partial/in-place rendering, to avoid building new strings.
 local M = {}
 
 local window = require("fidget.notification.window")
@@ -52,32 +51,6 @@ M.options = {
   ---
   ---@type "message"|"annote"
   align = "message",
-
-  --- Reflow (wrap) messages wider than notification window
-  ---
-  --- The various options determine how wrapping is handled mid-word.
-  ---
-  --- Example: ~
-  --->
-  ---       "hard" is reflo INFO
-  ---         wed like this
-  ---
-  ---   "hyphenate" is ref- INFO
-  ---       lowed like this
-  ---
-  ---   "ellipsis" is refl… INFO
-  ---       …owed like this
-  ---<
-  ---
-  --- If this option is set to false, long lines will simply be truncated.
-  ---
-  --- This option has no effect if |fidget.option.notification.window.max_width|
-  --- is `0` (i.e., infinite).
-  ---
-  --- Annotes longer than this width on their own will not be wrapped.
-  ---
-  ---@type "hard"|"hyphenate"|"ellipsis"|false
-  reflow = false,
 
   --- Separator between group name and icon
   ---
@@ -147,19 +120,6 @@ local function normal_hl()
     return window.options.normal_hl
   end
   return "Normal" -- default
-end
-
----  Whether nr is a codepoint representing whitespace.
----
----@param s string
----@param index integer
----@return boolean
-local function whitespace(s, index)
-  -- Same heuristic as vim.fn.trim(): <= 32 includes all ASCII whitespace
-  -- (as well as other control chars, which we don't care about).
-  -- Note that 160 is the unicode no-break space but we don't want to break on
-  -- that anyway.
-  return vim.fn.strgetchar(s, index) <= 32
 end
 
 --- The displayed width of some strings.

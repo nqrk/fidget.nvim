@@ -86,11 +86,11 @@ local logger                = require("fidget.logger")
 --- A notification element in the notifications history.
 ---
 ---@class HistoryItem : Item
----@field removed       boolean     Whether this item is deleted
----@field group_key     Key         Key of the group this item belongs to
----@field group_name    string|nil  Title of the group this item belongs to
----@field group_icon    string|nil  Icon of the group this item belongs to
----@field last_updated  number      What time this item was last updated, in seconds since Jan 1, 1970
+---@field removed       boolean          Whether this item is deleted
+---@field group_key     Key              Key of the group this item belongs to
+---@field group_name    string|false|nil Title of the group this item belongs to
+---@field group_icon    string|false|nil Icon of the group this item belongs to
+---@field last_updated  number           What time this item was last updated, in seconds since Jan 1, 1970
 
 --- Filter options when querying for notifications history.
 ---
