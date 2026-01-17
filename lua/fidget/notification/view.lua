@@ -27,6 +27,16 @@ M.options = {
   ---@type boolean
   stack_upwards = true,
 
+  --- Automatically highlight notification using tree-sitter
+  ---
+  ---@type string|false
+  highlight = "markdown_inline",
+
+  --- Hide markdown tags with the "conceal" highlight name
+  ---
+  ---@type boolean
+  hide_conceal = true,
+
   --- Indent messages longer than a single line
   ---
   --- Example: ~
@@ -464,12 +474,9 @@ function M.render_item(item, config, count)
   local annote = item.annote and Token(item.annote, item.style)
   local sep = config.annote_separator or " "
 
-  -- TODO:
-  -- add an M.options to toggle this
-  -- add a default_highlight = "markdown_inline" or smthing
-  local hls = Highlight(msg, "markdown")
-  if not hls then
-    logger.warn("nothing to highlights in this message!")
+  local hls
+  if M.options.highlight and M.options.highlight ~= "" then
+    hls = Highlight(msg, M.options.highlight)
   end
 
   for s in vim.gsplit(msg, "\n", { plain = true, trimempty = true }) do
@@ -516,10 +523,11 @@ function M.render_item(item, config, count)
                   ts.scol - next_start < word.ecol and ts.ecol - next_start + 1 > word.scol
               then
                 -- Removes concealed token
-                -- NOTE: should we open this to M.options? mb users want to see concealed?
-                if ts.hl == vim.fn.hlID("conceal") then
-                  line_ptr = line_ptr - #word.text
-                  word.text = ""
+                if M.options.hide_conceal then
+                  if ts.hl == vim.fn.hlID("conceal") then
+                    line_ptr = line_ptr - #word.text
+                    word.text = ""
+                  end
                 end
                 word.hl = vim.tbl_map(function(value)
                   if value ~= window.no_blend_hl then value = ts.hl end
