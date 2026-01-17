@@ -289,10 +289,11 @@ end
 
 --- Returns the Treesitter highlight groups for a given source and language.
 ---
----@param source string
----@param lang   string
+---@param source   string
+---@param lang     string
+---@param prev_hls table|nil
 ---@return table|nil hls
-local function Highlight(source, lang)
+local function Highlight(source, lang, prev_hls)
   local ok, parser = pcall(function()
     return vim.treesitter.get_string_parser(source, lang)
   end)
@@ -307,6 +308,9 @@ local function Highlight(source, lang)
   end
 
   local hls = {} -- holds captured hl
+  if prev_hls then
+    hls = prev_hls
+  end
   local line = {}
   local prev_line = 0
   local prev_text, prev_range
@@ -477,6 +481,12 @@ function M.render_item(item, config, count)
   local hls
   if M.options.highlight and M.options.highlight ~= "" then
     hls = Highlight(msg, M.options.highlight)
+    if hls then
+      -- Also use inline for markdown
+      if M.options.highlight == "markdown" then
+        hls = Highlight(msg, "markdown_inline", hls)
+      end
+    end
   end
 
   for s in vim.gsplit(msg, "\n", { plain = true, trimempty = true }) do
