@@ -4,6 +4,7 @@
 local M = {}
 
 local window = require("fidget.notification.window")
+local logger = require("fidget.logger")
 
 ---@type Cache
 local cache = require("fidget.notification.model").cache()
@@ -128,6 +129,14 @@ function M.check_multigrid_ui()
     end
   end
   return false
+end
+
+---@return string
+local function normal_hl()
+  if window.options.normal_hl ~= "Normal" and window.options.normal_hl ~= "" then
+    return window.options.normal_hl
+  end
+  return "Normal" -- default
 end
 
 ---  Whether nr is a codepoint representing whitespace.
@@ -268,6 +277,89 @@ local function Annote(line, width, annote, sep, first)
   return line, width
 end
 
+--- Returns the Treesitter highlight groups for a given source and language.
+---
+---@param source string
+---@param lang   string
+---@return table|nil hls
+local function Highlight(source, lang)
+  local ok, parser = pcall(function()
+    return vim.treesitter.get_string_parser(source, lang)
+  end)
+  if not ok then
+    logger.warn(parser)
+    return
+  end
+  local tree = parser:parse()[1]
+  local query = vim.treesitter.query.get(lang, "highlights")
+  if not query then
+    return -- query file not found
+  end
+
+  local hls = {} -- holds captured hl
+  local line = {}
+  local prev_line = 0
+  local prev_text, prev_range
+
+  for id, node in query:iter_captures(tree:root(), source) do
+    local text = vim.treesitter.get_node_text(node, source)
+    if not text then
+      goto continue
+    end
+    local name = query.captures[id]
+    if name == "spell" or name == "nospell" then
+      goto continue -- ignores spellcheck
+    end
+
+    -- Finds hl groups id if exists
+    local hl = vim.fn.hlID(name)
+    if hl == 0 then
+      hl = vim.fn.hlID("@" .. name)
+      if hl == 0 then
+        hl = vim.fn.hlID(normal_hl()) -- fallback
+      end
+    end
+
+    local srow, scol, _, ecol = node:range()
+    if prev_line ~= srow then
+      table.insert(hls, line) -- push to a new line
+      line = {}
+      prev_line = srow
+    end
+    if prev_text ~= text then
+      prev_text = text
+      prev_range = srow
+    else
+      if srow == prev_range then
+        line[#line].hl = hl -- latest node takes priority
+      end
+    end
+    -- Uses the same item renderer struct
+    for _, token in ipairs(Tokenize(text)) do
+      local t = {
+        srow = srow,
+        scol = scol,
+        ecol = ecol,
+        text = token[3],
+        hl = hl
+      }
+      if not vim.tbl_contains(line,
+            function(w)
+              return vim.deep_equal(w, t)
+            end, { predicate = true })
+      then
+        table.insert(line, t)
+      end
+    end
+    ::continue::
+  end
+  if #line > 0 then
+    table.insert(hls, line)
+    return hls
+  end
+  return nil
+end
+
 ---@return NotificationLine[]|nil lines
 ---@return integer                width
 function M.render_group_separator()
@@ -363,12 +455,7 @@ function M.render_item(item, config, count)
   if not is_multigrid_ui then
     table.insert(hl, window.no_blend_hl)
   end
-
-  if M.options.normal_hl ~= "Normal" and M.options.normal_hl ~= "" then
-    table.insert(hl, M.options.normal_hl)
-  else
-    table.insert(hl, "Normal") -- default
-  end
+  table.insert(hl, normal_hl())
 
   local width = 0
   local max_width = vim.opt.columns:get() - line_margin() - 4
@@ -377,11 +464,20 @@ function M.render_item(item, config, count)
   local annote = item.annote and Token(item.annote, item.style)
   local sep = config.annote_separator or " "
 
+  -- TODO:
+  -- add an M.options to toggle this
+  -- add a default_highlight = "markdown_inline" or smthing
+  local hls = Highlight(msg, "markdown")
+  if not hls then
+    logger.warn("nothing to highlights in this message!")
+  end
+
   for s in vim.gsplit(msg, "\n", { plain = true, trimempty = true }) do
     local line = {}
     local line_ptr = 0
     local prev_end = 0
     local next_start = 0
+    local extra_line = 0
 
     for _, token in ipairs(Tokenize(s)) do
       if not token then
@@ -395,18 +491,47 @@ function M.render_item(item, config, count)
           line, width = Annote(line, width, annote, sep, #tokens == 0)
         end
         table.insert(tokens, Line(unpack(line))) -- push to newline
-        line = {}
-        line_ptr = 0
         next_start = token[1]
+        extra_line = extra_line + 1
+        line_ptr = 0
+        line = {}
       end
-      table.insert(line, {
+
+      local word = {
         scol = (token[1] == 1 and 0 or token[1]) - next_start,
         ecol = token[2] - next_start + 1,
-        text = token[3]
-      })
+        text = token[3],
+        hl = hl
+      }
+      table.insert(line, word)
+
+      -- Adds treesitter highlights
+      if hls then
+        for _, tsline in ipairs(hls) do
+          for _, ts in ipairs(tsline) do
+            if ts.text == word.text and ts.srow + extra_line == #tokens then
+              -- paint the whole line
+              if ts.scol == 0 and ts.ecol == 0
+                  or
+                  ts.scol - next_start < word.ecol and ts.ecol - next_start + 1 > word.scol
+              then
+                -- Removes concealed token
+                -- NOTE: should we open this to M.options? mb users want to see concealed?
+                if ts.hl == vim.fn.hlID("conceal") then
+                  line_ptr = line_ptr - #word.text
+                  word.text = ""
+                end
+                word.hl = vim.tbl_map(function(value)
+                  if value ~= window.no_blend_hl then value = ts.hl end
+                  return value
+                end, word.hl)
+              end
+            end
+          end
+        end
+      end
       prev_end = token[2] + 1
       line_ptr = line_ptr + #token[3] + spacing
-
       width = math.max(width, line_ptr + line_margin())
     end
     if annote then
