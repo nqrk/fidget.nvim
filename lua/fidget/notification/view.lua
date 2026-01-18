@@ -449,12 +449,14 @@ function M.render_item(item, config, count)
     end
   end
 
+  -- Safeguard against lines overflow
+  local extra_line = 0
+
   for s in vim.gsplit(msg, "\n", { plain = true, trimempty = true }) do
     local line = {}
     local line_ptr = 0
     local prev_end = 0
     local next_start = 0
-    local extra_line = 0
 
     for _, token in ipairs(Tokenize(s)) do
       if not token then
