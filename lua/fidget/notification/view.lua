@@ -432,7 +432,10 @@ function M.render_item(item, config, count)
   table.insert(hl, normal_hl())
 
   local width = 0
-  local max_width = vim.opt.columns:get() - line_margin() - 4
+  local max_width = window.options.max_width
+  if max_width <= 0 then
+    max_width = vim.opt.columns:get() - line_margin() - 4
+  end
 
   local tokens = {}
   local annote = item.annote and Token(item.annote, item.style)
