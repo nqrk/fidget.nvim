@@ -154,6 +154,18 @@ local function line_width(...)
   return w == 0 and w or w + line_margin()
 end
 
+---@return number
+local function window_max()
+  local pad = line_margin() + 4
+  local win = window.max_width() - pad
+  local ed = vim.opt.columns:get() - pad
+  -- We ditch math.huge constant here because we need a limit to split lines
+  if win <= 0 or ed < win then
+    return ed
+  end
+  return win
+end
+
 --- Tokenize a string into a list of tokens.
 ---
 --- A token is a contiguous sequence of characters or an individual non-space character.
@@ -436,16 +448,6 @@ function M.render_item(item, config, count)
   end
   table.insert(hl, normal_hl())
 
-  local width = 0
-  local max_width = window.options.max_width
-  if max_width <= 0 then
-    max_width = vim.opt.columns:get() - line_margin() - 4
-  end
-
-  local tokens = {}
-  local annote = item.annote and Token(item.annote, item.style)
-  local sep = config.annote_separator or " "
-
   local hls
   if M.options.highlight and M.options.highlight ~= "" then
     hls = Highlight(msg, M.options.highlight)
@@ -456,9 +458,15 @@ function M.render_item(item, config, count)
       end
     end
   end
-
   -- We have to keep track of extra lines added in tokens to not cause a desync with hls
   local extra_line = 0
+
+  local tokens = {}
+  local annote = item.annote and Token(item.annote, item.style)
+  local sep = config.annote_separator or " "
+
+  local width = 0
+  local max_width = window_max()
 
   for s in vim.gsplit(msg, "\n", { plain = true, trimempty = true }) do
     local line = {}
