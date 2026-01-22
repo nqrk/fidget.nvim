@@ -156,38 +156,42 @@ end
 
 --- Tokenize a string into a list of tokens.
 ---
---- A token is a contiguous sequence of alphanumeric characters or an individual non-space character.
+--- A token is a contiguous sequence of characters or an individual non-space character.
 --- Ignores consecutives whitespace.
----
----                     scol     ecol    word
----@alias Token table<integer, integer, string>
+---                      scol          ecol          word
+---@alias Token  { [1]: integer, [2]: integer, [3]: string }
 ---
 ---@param source string
 ---@return Token[]
 local function Tokenize(source)
-  local pos = 1
+  local pos = 0
   local res = {}
+  local len = vim.fn.strchars(source)
 
-  while pos <= #source do
-    local scol, ecol, w = source:find("(%w+)", pos)
+  while pos < len do
+    ---@type string
+    local char = vim.fn.strcharpart(source, pos, 1)
 
-    if not scol then
-      for i = pos, #source do
-        local c = source:sub(i, i)
-        if c:match("%S") then
-          table.insert(res, { i, i, c })
+    if char:match("%w") then
+      local ptr = pos
+      local word = { char }
+
+      while ptr + 1 < len do
+        local c = vim.fn.strcharpart(source, ptr + 1, 1)
+        if not c:match("%w") then
+          break
         end
+        table.insert(word, c)
+        ptr = ptr + 1
       end
-      break
-    end
-    for i = pos, scol - 1 do
-      local c = source:sub(i, i)
-      if c:match("%S") then
-        table.insert(res, { i, i, c })
+      table.insert(res, { pos, ptr, table.concat(word) })
+      pos = ptr + 1
+    else
+      if not char:match("%s") then
+        table.insert(res, { pos, pos, char })
       end
+      pos = pos + 1
     end
-    table.insert(res, { scol, ecol, w })
-    pos = ecol + 1
   end
   return res
 end
@@ -239,9 +243,10 @@ local function Annote(line, width, annote, sep, first)
   else
     -- Indent messages longer than a single line (see notification.view.align)
     if M.options.align == "message" then
-      table.insert(line, Token(string.rep(sep, #annote[1])))
+      local len = vim.fn.strwidth(annote[1])
+      table.insert(line, Token(string.rep(sep, len)))
 
-      width = width + #annote[1]
+      width = width + len
     end
   end
   return line, width
@@ -452,7 +457,7 @@ function M.render_item(item, config, count)
     end
   end
 
-  -- Safeguard against lines overflow
+  -- We have to keep track of extra lines added in tokens to not cause a desync with hls
   local extra_line = 0
 
   for s in vim.gsplit(msg, "\n", { plain = true, trimempty = true }) do
@@ -460,27 +465,29 @@ function M.render_item(item, config, count)
     local line_ptr = 0
     local prev_end = 0
     local next_start = 0
+    local bytes_offset = 0
 
     for _, token in ipairs(Tokenize(s)) do
       if not token then
         break
       end
       local spacing = token[1] - prev_end
+      local strlen = vim.fn.strwidth(token[3]) -- cell width
 
       -- Check if the line would overflow notification window if added as it is
-      if line_ptr + #token[3] + spacing >= max_width - (annote and line_width(annote[1]) or 0) then
+      if line_ptr + strlen + spacing >= max_width - (annote and line_width(annote[1]) or 0) then
         if annote then
           line, width = Annote(line, width, annote, sep, #tokens == 0)
         end
         table.insert(tokens, Line(unpack(line))) -- push to newline
         next_start = token[1]
-        extra_line = extra_line + 1
+        extra_line = extra_line + 1              -- safeguard
         line_ptr = 0
         line = {}
       end
 
       local word = {
-        scol = (token[1] == 1 and 0 or token[1]) - next_start,
+        scol = token[1] - next_start,
         ecol = token[2] - next_start + 1,
         text = token[3],
         hl = hl
@@ -495,12 +502,11 @@ function M.render_item(item, config, count)
               -- paint the whole line
               if ts.scol == 0 and ts.ecol == 0
                   or
-                  ts.scol - next_start < word.ecol and ts.ecol - next_start + 1 > word.scol
-              then
+                  word.scol >= ts.scol - next_start - bytes_offset then
                 -- Removes concealed token
                 if M.options.hide_conceal then
                   if ts.hl == vim.fn.hlID("conceal") then
-                    line_ptr = line_ptr - #word.text
+                    line_ptr = line_ptr - strlen
                     word.text = ""
                   end
                 end
@@ -513,8 +519,12 @@ function M.render_item(item, config, count)
           end
         end
       end
+      -- Stores extra bytes needed to sync hls
+      if #token[3] > strlen then
+        bytes_offset = bytes_offset + #token[3]
+      end
       prev_end = token[2] + 1
-      line_ptr = line_ptr + #token[3] + spacing
+      line_ptr = line_ptr + strlen + spacing
       width = math.max(width, line_ptr + line_margin())
     end
     if annote then

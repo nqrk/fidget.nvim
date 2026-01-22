@@ -3,14 +3,19 @@ local notif = require("fidget.notification")
 
 local str = {
   line_msg = "A notification message!",
+  line_msg_utf8 = "󰢱 こんにちは – Hello Привет  – سلام !",
   line_msg_log = "A notification message with log level!",
   line_msg_annote = "A notification message with annote!",
   line_msg_markdown = "A **notification** message `with` ~log~ markdown!",
+  line_msg_markdown_utf8 = "󰢱 **こんにちは** – ~Bye~ Hello [Привет]  – سلام !",
   long_line_msg = "This is a very very long line that stretches beyond the usual " ..
       "notification limit and is meant to test how the UI handles overflow.",
   long_line_markdown = "This is a very **very** long line that stretches `beyond` the usual " ..
       "notification ~limit~ and is meant to [test] how the _UI_ handles overflow.",
+  long_line_markdown_utf8 = "This is a very **very** long `こんにちは世界` ! " ..
+      "🌍🚀✨💡🔔🎉🌟🌈🌹🍀🍕🎵📚🔬🖌️🛠️🎨🗝️⚙️🧰🧲 notification ~limit~ and is meant to [t€st] overfløw.",
   multiline_msg = "align message style\nlooks like this\nwhen reflowed",
+  multiline_msg_utf8 = "align message🎵 style\nlooks🌈🌹🍀🍕like this\nwh€n reflowed",
   block_lua = [[
 -- This is a     `lua` function!
 
@@ -36,11 +41,11 @@ func main() {
 **Features in bold**
 - Lightweight and fast
 - Easy to integrate with `this feature`
-- Open sourced
+- Open sourced 
 
 > Some notes here, and in a "quote".
 
-Sample of `code` here:
+Sample of `cøde` here:
 ```lua
 function foo()
   print("some text here")
@@ -52,6 +57,11 @@ end
 -- a notification window with a message
 local function line_msg()
   notif.notify(str.line_msg)
+end
+
+-- a notification window with a message, support utf8
+local function line_msg_utf8()
+  notif.notify(str.line_msg_utf8)
 end
 
 -- a notification window with INFO annote
@@ -67,6 +77,11 @@ end
 -- a notification window with markdown highlight, tags removed
 local function line_msg_markdown()
   notif.notify(str.line_msg_markdown)
+end
+
+-- a notification window with markdown highlight, tags removed, support utf8
+local function line_msg_markdown_utf8()
+  notif.notify(str.line_msg_markdown_utf8)
 end
 
 -- a notification window with markdown highlight, tags visible
@@ -121,9 +136,21 @@ local function long_line_msg_markdown()
   notif.notify(str.long_line_markdown)
 end
 
+-- a notification window, single line overflow split in multi lines
+-- each lines are highlighted using markdown_inline even when resized
+-- support utf8
+local function long_line_msg_markdown_utf8()
+  notif.notify(str.long_line_markdown_utf8)
+end
+
 -- a notification window, multi lines
 local function multi_line_msg()
   notif.notify(str.multiline_msg)
+end
+
+-- a notification window, multi lines, utf8
+local function multi_line_msg_utf8()
+  notif.notify(str.multiline_msg_utf8)
 end
 
 -- a notification window, multi lines with foo annote and aligned by annote
@@ -190,13 +217,15 @@ end
 
 ---
 local M = {
-  ---             name     test   time offset
-  ---@type table<string,function,number|nil>
+  ---               name         test         time offset
+  ---@type { [1]: string, [2]: function, [3]: number|nil }
   test = {
     { "line_msg",                        line_msg,                        0 },
+    { "line_msg_utf8",                   line_msg_utf8,                   0 },
     { "line_msg_log",                    line_msg_log,                    0 },
     { "line_msg_annote",                 line_msg_annote,                 0 },
     { "line_msg_markdown",               line_msg_markdown,               0 },
+    { "line_msg_markdown_utf8",          line_msg_markdown_utf8,          0 },
     { "line_msg_markdown_show_conceal",  line_msg_markdown_show_conceal,  0 },
     { "line_msg_markdown_highlight_off", line_msg_markdown_highlight_off, 0 },
     { "line_msg_colorscheme",            line_msg_colorscheme,            0 },
@@ -206,8 +235,10 @@ local M = {
     { "long_line_msg_annote",            long_line_msg_annote,            1 },
     { "long_line_msg_align",             long_line_msg_align,             0 },
     { "long_line_msg_markdown",          long_line_msg_markdown,          0 },
+    { "long_line_msg_markdown_utf8",     long_line_msg_markdown_utf8,     0 },
     { "clear",                           clear,                           4 },
     { "multiline_msg",                   multi_line_msg,                  0 },
+    { "multiline_msg_utf8",              multi_line_msg_utf8,             0 },
     { "multi_line_msg_annote",           multi_line_msg_annote,           0 },
     { "multi_line_msg_align",            multi_line_msg_align,            0 },
     { "multi_line_msg_overflow",         multi_line_msg_overflow,         0 },
