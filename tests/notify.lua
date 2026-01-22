@@ -3,6 +3,7 @@ local notif = require("fidget.notification")
 
 local str = {
   line_msg = "A notification message!",
+  line_msg_tab = "A notification\tmessage\twith\ttab!",
   line_msg_utf8 = "󰢱 こんにちは – Hello Привет  – سلام !",
   line_msg_log = "A notification message with log level!",
   line_msg_annote = "A notification message with annote!",
@@ -31,7 +32,7 @@ package main
 import "fmt"
 
 func main() {
-  // this is a comment
+  // this is 	a comment
   fmt.Println("Hello, world!")
 }
 ]],
@@ -48,7 +49,7 @@ func main() {
 Sample of `cøde` here:
 ```lua
 function foo()
-  print("some text here")
+  print("some	tab here")
 end
 ```
 ]]
@@ -57,6 +58,12 @@ end
 -- a notification window with a message
 local function line_msg()
   notif.notify(str.line_msg)
+end
+
+-- a notification window with a message, tab indented
+local function line_msg_tab()
+  notif.window.options.tabstop = 4
+  notif.notify(str.line_msg_tab)
 end
 
 -- a notification window with a message, support utf8
@@ -218,9 +225,10 @@ end
 ---
 local M = {
   ---               name         test         time offset
-  ---@type { [1]: string, [2]: function, [3]: number|nil }
+  ---@type table { [1]: string, [2]: function, [3]: number|nil }
   test = {
     { "line_msg",                        line_msg,                        0 },
+    { "line_msg_tab",                    line_msg_tab,                    0 },
     { "line_msg_utf8",                   line_msg_utf8,                   0 },
     { "line_msg_log",                    line_msg_log,                    0 },
     { "line_msg_annote",                 line_msg_annote,                 0 },

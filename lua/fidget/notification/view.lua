@@ -177,6 +177,7 @@ end
 ---@return Token[]
 local function Tokenize(source)
   local pos = 0
+  local tab = 1
   local res = {}
   local len = vim.fn.strchars(source)
 
@@ -196,11 +197,15 @@ local function Tokenize(source)
         table.insert(word, c)
         ptr = ptr + 1
       end
-      table.insert(res, { pos, ptr, table.concat(word) })
+      table.insert(res, { pos + tab, ptr + tab, table.concat(word) })
       pos = ptr + 1
     else
-      if not char:match("%s") then
-        table.insert(res, { pos, pos, char })
+      if not char:match("%s") or char == "\t" then
+        if char == "\t" then
+          tab = tab + window.options.tabstop
+        else
+          table.insert(res, { pos + tab, pos + tab, char })
+        end
       end
       pos = pos + 1
     end
