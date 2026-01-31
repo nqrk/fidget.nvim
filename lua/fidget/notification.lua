@@ -22,6 +22,7 @@ local logger                = require("fidget.logger")
 ---@field group         Key|nil       Group that this notification item belongs to
 ---@field annote        string|nil    Optional single-line title that accompanies the message
 ---@field position      string|nil    Optional text position inside the window
+---@field lang          string|nil    Optional tree-sitter highlight language to use
 ---@field hidden        boolean|nil   Whether this item should be shown
 ---@field ttl           number|nil    How long after a notification item should exist; pass 0 to use default value
 ---@field update_only   boolean|nil   If true, don't create new notification items
@@ -78,6 +79,7 @@ local logger                = require("fidget.logger")
 ---@field message       string      Displayed message for the item
 ---@field annote        string|nil  Optional title that accompanies the message
 ---@field position      string|nil  Optional text position inside the window
+---@field lang          string|nil  Optional tree-sitter highlight language to use
 ---@field style         string      Style used to render the annote/title, if any
 ---@field hidden        boolean     Whether this item should be shown
 ---@field expires_at    number      What time this item should be removed; math.huge means never
@@ -184,8 +186,9 @@ notification.default_config = {
 ---@param item Item
 function notification.set_content_key(item)
   item.content_key = string.format(
-    "%s-%s%s",
+    "%s-%s-%s%s",
     item.message,
+    item.lang and item.lang or "",
     item.position and item.position or "",
     item.annote and item.annote or string.char(0)
   )

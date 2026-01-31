@@ -5,6 +5,7 @@ local str = {
   line_msg = "A notification message!",
   line_msg_tab = "A notification\tmessage\twith\ttab!",
   line_msg_utf8 = "󰢱 こんにちは – Hello Привет  – سلام !",
+  line_msg_lang = "print([x**2 for x in range(1, 6)])",
   line_msg_log = "A notification message with log level!",
   line_msg_annote = "A notification message with annote!",
   line_msg_markdown = "A **notification** message `with` ~log~ markdown!",
@@ -32,8 +33,8 @@ package main
 import "fmt"
 
 func main() {
-  // this is 	a comment
-  fmt.Println("Hello, world!")
+  // this is 	a `comment`
+  fmt.Println("Hello, ~world~!")
 }
 ]],
   block_md = [[
@@ -69,6 +70,11 @@ end
 -- a notification window with a message, support utf8
 local function line_msg_utf8()
   notif.notify(str.line_msg_utf8)
+end
+
+-- a notification window with a message, python highlighted
+local function line_msg_lang()
+  notif.notify(str.line_msg_lang, nil, { lang = "python" })
 end
 
 -- a notification window with INFO annote
@@ -254,6 +260,7 @@ local M = {
     { "line_msg_tab",                    line_msg_tab,                    0 },
     { "line_msg_utf8",                   line_msg_utf8,                   0 },
     { "line_msg_log",                    line_msg_log,                    0 },
+    { "line_msg_lang",                   line_msg_lang,                   0 },
     { "line_msg_left",                   line_msg_left,                   0 },
     { "line_msg_annote",                 line_msg_annote,                 0 },
     { "line_msg_markdown",               line_msg_markdown,               0 },

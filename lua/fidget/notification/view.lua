@@ -493,11 +493,12 @@ function M.render_item(item, config, count)
   table.insert(hl, normal_hl())
 
   local hls
-  if M.options.highlight and M.options.highlight ~= "" then
-    hls = Highlight(msg, M.options.highlight)
+  local lang = item.lang and item.lang or M.options.highlight
+  if lang and lang ~= "" then
+    hls = Highlight(msg, lang)
     if hls then
       -- Also use inline for markdown
-      if M.options.highlight == "markdown" then
+      if lang == "markdown" then
         hls = Highlight(msg, "markdown_inline", hls)
       end
     end
