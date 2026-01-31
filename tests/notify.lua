@@ -76,6 +76,11 @@ local function line_msg_log()
   notif.notify(str.line_msg_log, 2)
 end
 
+-- a notification window with INFO annote, left aligned
+local function line_msg_left()
+  notif.notify(str.line_msg, 2, { position = "left" })
+end
+
 -- a notification window with foo annote
 local function line_msg_annote()
   notif.notify(str.line_msg_annote, nil, { annote = "foo" })
@@ -114,6 +119,11 @@ end
 -- a notification window, single line overflow split in multi lines
 local function long_line_msg()
   notif.notify(str.long_line_msg)
+end
+
+-- a notification window, single line overflow split in multi lines, left aligned
+local function long_line_msg_left()
+  notif.notify(str.long_line_msg, nil, { position = "left" })
 end
 
 -- a notification window, single line overflow split in multi lines
@@ -178,21 +188,21 @@ local function multi_line_msg_overflow()
   notif.notify(str.multiline_msg .. "\n" .. str.long_line_msg, 2)
 end
 
--- a notification window with an highlighted [[block of lua code]]
+-- a notification window with an highlighted [[block of lua code]], left aligned
 -- colors should be the same as filetype=lua
 local function block_msg_lua()
   notif.view.options.highlight = "lua"
-  notif.notify(str.block_lua)
+  notif.notify(str.block_lua, nil, { position = "left" })
 end
 
--- a notification window with an highlighted [[block of go code]]
+-- a notification window with an highlighted [[block of go code]], left aligned
 -- colors should be the same as filetype=go
 local function block_msg_go()
   notif.view.options.highlight = "go"
-  notif.notify(str.block_go)
+  notif.notify(str.block_go, nil, { position = "left" })
 end
 
--- a notification window with an highlighted [[block of markdown text]]
+-- a notification window with an highlighted [[block of markdown text]], right aligned
 -- colors should be the same as filetype=markdown
 --
 -- NOTE: mixing highlight with ```lang\n text``` is not yet supported
@@ -216,6 +226,18 @@ local function empty_annote()
   notif.notify("empty annote ->", nil, { annote = "" })
 end
 
+-- a notification window without group name
+local function empty_name()
+  notif.default_config.name = nil
+  notif.notify("empty group name")
+end
+
+-- a notification window with a group name but no icon
+local function empty_icon()
+  notif.default_config.icon = nil
+  notif.notify("empty group icon")
+end
+
 -- the notification window is cleared and closed
 local function clear()
   notif.clear()
@@ -231,6 +253,7 @@ local M = {
     { "line_msg_tab",                    line_msg_tab,                    0 },
     { "line_msg_utf8",                   line_msg_utf8,                   0 },
     { "line_msg_log",                    line_msg_log,                    0 },
+    { "line_msg_left",                   line_msg_left,                   0 },
     { "line_msg_annote",                 line_msg_annote,                 0 },
     { "line_msg_markdown",               line_msg_markdown,               0 },
     { "line_msg_markdown_utf8",          line_msg_markdown_utf8,          0 },
@@ -239,6 +262,7 @@ local M = {
     { "line_msg_colorscheme",            line_msg_colorscheme,            0 },
     { "clear",                           clear,                           4 },
     { "long_line_msg",                   long_line_msg,                   0 },
+    { "long_line_msg_left",              long_line_msg_left,              0 },
     { "long_line_msg_resized",           long_line_msg_resized,           0 },
     { "long_line_msg_annote",            long_line_msg_annote,            1 },
     { "long_line_msg_align",             long_line_msg_align,             0 },
@@ -257,6 +281,10 @@ local M = {
     { "clear",                           clear,                           1 },
     { "block_msg_markdown",              block_msg_markdown,              0 },
     { "clear",                           clear,                           1 },
+    { "empty_name",                      empty_name,                      0 },
+    { "clear",                           clear,                           1 },
+    { "empty_icon",                      empty_icon,                      0 },
+    { "clear",                           clear,                           1 },
     { "empty_msg",                       empty_msg,                       0 },
     { "empty_msg_annote",                empty_msg_annote,                0 },
     { "empty_annote",                    empty_annote,                    0 },
@@ -267,6 +295,7 @@ function M.run()
   logger.options.level = vim.log.levels.DEBUG
   logger.debug("-- test --")
 
+  notif.window.options.border = "single"
   -- notif.view.options.stack_upwards = true
   -- notif.view.options.text_position = "left"
   -- notif.view.options.line_margin = 8
@@ -274,6 +303,7 @@ function M.run()
 
   M.config = {
     colorscheme = vim.g.colors_name,
+    default = vim.deepcopy(notif.default_config),
     window = vim.deepcopy(notif.window.options),
     view = vim.deepcopy(notif.view.options),
   }
@@ -296,6 +326,7 @@ function M.run()
                 if M.config.colorscheme ~= vim.g.colors_name then
                   vim.cmd("colorscheme " .. M.config.colorscheme)
                 end
+                for k, v in pairs(M.config.default) do notif.default_config[k] = v end
                 for k, v in pairs(M.config.window) do notif.window.options[k] = v end
                 for k, v in pairs(M.config.view) do notif.view.options[k] = v end
               end

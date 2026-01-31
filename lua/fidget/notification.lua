@@ -21,6 +21,7 @@ local logger                = require("fidget.logger")
 ---@field key           Key|nil       Replace existing notification item of the same key
 ---@field group         Key|nil       Group that this notification item belongs to
 ---@field annote        string|nil    Optional single-line title that accompanies the message
+---@field position      string|nil    Optional text position inside the window
 ---@field hidden        boolean|nil   Whether this item should be shown
 ---@field ttl           number|nil    How long after a notification item should exist; pass 0 to use default value
 ---@field update_only   boolean|nil   If true, don't create new notification items
@@ -76,6 +77,7 @@ local logger                = require("fidget.logger")
 ---@field content_key   Key         What to deduplicate items by (do not deduplicate if `nil`)
 ---@field message       string      Displayed message for the item
 ---@field annote        string|nil  Optional title that accompanies the message
+---@field position      string|nil  Optional text position inside the window
 ---@field style         string      Style used to render the annote/title, if any
 ---@field hidden        boolean     Whether this item should be shown
 ---@field expires_at    number      What time this item should be removed; math.huge means never
@@ -156,8 +158,8 @@ notification.default_config = {
 --- Sets a |fidget.notification.Item|'s `content_key`, for deduplication.
 ---
 --- This default implementation sets an item's `content_key` to its `message`,
---- appended with its `annote` (or a null byte if it has no `annote`), a rough
---- "hash" of its contents. You can write your own `update_hook` that "hashes"
+--- appended with its `position` and `annote` (or a null byte if it has no `annote`),
+--- a rough "hash" of its contents. You can write your own `update_hook` that "hashes"
 --- the message differently, e.g., only considering the `message`, or taking the
 --- `data` or style fields into account.
 ---
@@ -181,7 +183,12 @@ notification.default_config = {
 ---
 ---@param item Item
 function notification.set_content_key(item)
-  item.content_key = item.message .. " " .. (item.annote and item.annote or string.char(0))
+  item.content_key = string.format(
+    "%s-%s%s",
+    item.message,
+    item.position and item.position or "",
+    item.annote and item.annote or string.char(0)
+  )
 end
 
 ---@options notification [[

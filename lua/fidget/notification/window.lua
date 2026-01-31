@@ -630,6 +630,8 @@ function M.set_lines(message)
 
     ---@cast body NotificationItems
     if body.line then
+      local position = body.opts and body.opts.position or message.opts.position
+
       for _, token in ipairs(body.line) do
         chunk = {}
         local prev_ecol = 0
@@ -645,7 +647,7 @@ function M.set_lines(message)
             table.insert(chunk, t) -- backward compatibility
           end
         end
-        set_extmark(buffer_id, namespace_id, row, chunk, message.opts.position, message.width)
+        set_extmark(buffer_id, namespace_id, row, chunk, position, message.width)
         row = row + 1
       end
     else

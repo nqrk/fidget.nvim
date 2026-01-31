@@ -278,6 +278,7 @@ function M.update(now, configs, state, msg, level, opts)
       group_key = group_key,
       message = msg,
       annote = opts.annote or annote_from_level(group.config, level),
+      position = opts.position or nil,
       style = style_from_level(group.config, level) or group.config.annote_style or "Question",
       hidden = opts.hidden or false,
       expires_at = compute_expiry(now, opts.ttl, group.config.ttl),
@@ -295,6 +296,7 @@ function M.update(now, configs, state, msg, level, opts)
     item.message = msg or item.message
     item.style = style_from_level(group.config, level) or item.style
     item.annote = opts.annote or annote_from_level(group.config, level) or item.annote
+    item.position = opts.position or item.position
     item.hidden = opts.hidden or item.hidden
     item.expires_at = opts.ttl and compute_expiry(now, opts.ttl, group.config.ttl) or item.expires_at
     item.skip_history = opts.skip_history or item.skip_history

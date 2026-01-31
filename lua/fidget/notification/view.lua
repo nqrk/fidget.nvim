@@ -25,13 +25,17 @@ local cache = require("fidget.notification.model").cache()
 --- not sure I wrote the lls docs properly its a lot of nested table and cases
 ---
 ---@alias NotificationTokens { hdr: NotificationToken[] }
----@alias NotificationItems { line: NotificationItem[] }
+---@alias NotificationItems { line: NotificationItem[], opts: NotificationItemOpts }
 
 ---@class NotificationItem
 ---@field ecol integer
 ---@field scol integer
 ---@field text string
 ---@field hl   string[]
+
+--- Per-message rendering options
+---@class NotificationItemOpts
+---@field position string
 
 --- A tuple consisting of some text and a stack of highlights.
 ---@class NotificationToken : {[1]: string, [2]: string[]}
@@ -469,7 +473,7 @@ end
 ---@param item   Item
 ---@param config Config
 ---@param count  number
----@return NotificationItems[]|nil lines
+---@return NotificationItems|nil lines
 ---@return integer                 width
 function M.render_item(item, config, count)
   if item.hidden then
@@ -504,7 +508,7 @@ function M.render_item(item, config, count)
   ---@type NotificationItem[]|NotificationToken[]
   local tokens = {}
   local annote = item.annote and Token(item.annote, item.style)
-  local left = M.options.text_position == "left"
+  local left = item.position and item.position == "left" or M.options.text_position == "left"
   local sep = config.annote_separator or " "
 
   local width = 0
@@ -587,7 +591,13 @@ function M.render_item(item, config, count)
   if #tokens == 0 and annote then
     tokens = { Line(annote) }
   end
-  return { line = tokens }, width
+  return {
+    line = tokens,
+    --- Options to be passed to window render for this notification
+    --- For now only text position is used
+    ---@type NotificationItemOpts
+    opts = { position = item.position }
+  }, width
 end
 
 --- Render notifications into lines and highlights.
