@@ -566,13 +566,42 @@ function M.show(height, width)
   return M.get_window(row, col, anchor, relative, width, height)
 end
 
---- Replace the set of lines in the Fidget window, right-justify them, and apply
---- highlights.
+---@param buf   integer
+---@param ns    integer
+---@param row   integer
+---@param text  any[]
+---@param width integer
+local function set_extmark(buf, ns, row, text, width)
+  if vim.fn.has("nvim-0.11.0") == 1 then
+    vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
+      virt_text = text,
+      virt_text_pos = "eol_right_align"
+    })
+  else
+    -- pre-0.11.0: eol_right_align was only introduced in 0.11.0;
+    -- without it we need to compute and add the padding ourselves
+    local len, padded = 0, { {} }
+    for _, tok in ipairs(text) do
+      len = len + vim.fn.strwidth(tok[1]) + vim.fn.count(tok[1], "\t") * math.max(0, M.options.tabstop - 1)
+      table.insert(padded, tok)
+    end
+    local pad_width = math.max(0, width - len)
+    if pad_width > 0 then
+      padded[1] = { string.rep(" ", pad_width), {} }
+    else
+      padded = text
+    end
+    vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
+      virt_text = padded,
+      virt_text_pos = "eol",
+    })
+  end
+end
+
+--- Replace the set of lines in the Fidget window, justify them, and apply highlights.
 ---
----
----@param lines       NotificationLine[]  lines to place into buffer
----@param width       integer             width of longest line
-function M.set_lines(lines, width)
+---@param message Notification
+function M.set_lines(message)
   local buffer_id = M.get_buffer()
   local namespace_id = M.get_namespace()
 
@@ -580,51 +609,45 @@ function M.set_lines(lines, width)
   vim.api.nvim_buf_clear_namespace(buffer_id, namespace_id, 0, -1)
 
   -- Prepare empty lines for extmarks
-  local empty_lines = vim.tbl_map(function() return "" end, lines)
+  local empty_lines = {}
+  for _ = 1, message.rows, 1 do
+    table.insert(empty_lines, "")
+  end
   vim.api.nvim_buf_set_lines(buffer_id, 0, -1, false, empty_lines)
 
-  for index, line in ipairs(lines) do
-    local prev_ecol = 0
+  local row = 0 -- top to bottom
+
+  for _, body in ipairs(message.lines) do
     local chunk = {}
 
-    for _, t in ipairs(line) do
-      if t.text then
-        if prev_ecol < t.scol then
-          table.insert(chunk, { string.rep(" ", t.scol - prev_ecol) })
-        end
-        table.insert(chunk, { t.text, t.hl })
-        prev_ecol = t.ecol
-      else
-        table.insert(chunk, t) -- backward compatibility
-      end
-    end
+    if body.line then
+      for _, token in ipairs(body.line) do
+        chunk = {}
+        local prev_ecol = 0
 
-    if vim.fn.has("nvim-0.11.0") == 1 then
-      vim.api.nvim_buf_set_extmark(buffer_id, namespace_id, index - 1, 0, {
-        virt_text = chunk,
-        virt_text_pos = "eol_right_align",
-      })
+        for _, t in ipairs(token) do
+          if t.text then
+            if prev_ecol < t.scol then
+              table.insert(chunk, { string.rep(" ", t.scol - prev_ecol), t.hl })
+            end
+            table.insert(chunk, { t.text, t.hl })
+            prev_ecol = t.ecol
+          else
+            table.insert(chunk, t) -- backward compatibility
+          end
+        end
+        set_extmark(buffer_id, namespace_id, row, chunk, message.width)
+        row = row + 1
+      end
     else
-      -- pre-0.11.0: eol_right_align was only introduced in 0.11.0;
-      -- without it we need to compute and add the padding ourselves
-      local len, padded = 0, { {} }
-      for _, tok in ipairs(chunk) do
-        len = len + vim.fn.strwidth(tok[1]) + vim.fn.count(tok[1], "\t") * math.max(0, M.options.tabstop - 1)
-        table.insert(padded, tok)
+      for _, hdr in ipairs(body.hdr) do
+        table.insert(chunk, hdr)
       end
-      local pad_width = math.max(0, width - len)
-      if pad_width > 0 then
-        padded[1] = { string.rep(" ", pad_width), {} }
-      else
-        padded = chunk
-      end
-      vim.api.nvim_buf_set_extmark(buffer_id, namespace_id, index - 1, 0, {
-        virt_text = padded,
-        virt_text_pos = "eol",
-      })
+      set_extmark(buffer_id, namespace_id, row, chunk, message.width)
+      row = row + 1
     end
   end
-  M.show(vim.api.nvim_buf_line_count(buffer_id), width)
+  M.show(vim.api.nvim_buf_line_count(buffer_id), message.width)
 end
 
 --- Close the Fidget window and associated buffers.

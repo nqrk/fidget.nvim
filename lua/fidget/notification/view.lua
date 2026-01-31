@@ -8,8 +8,29 @@ local logger = require("fidget.logger")
 ---@type Cache
 local cache = require("fidget.notification.model").cache()
 
+---@class Notification
+---@field opts    NotificationOpts   rendering options
+---@field lines   NotificationLine[] lines to place into buffer
+---@field rows    integer            total amount of lines
+---@field width   integer            width of longest line
+
+---@class NotificationOpts
+---@field upwards  boolean display from bottom to top
+
 --- A list of highlighted tokens.
----@class NotificationLine : NotificationToken[]
+---@alias NotificationLine NotificationTokens[]|NotificationItems[]
+
+--- NOTE: may need to double check this up
+--- not sure I wrote the lls docs properly its a lot of nested table and cases
+---
+---@alias NotificationTokens { hdr: NotificationToken[] }
+---@alias NotificationItems { line: NotificationItem[] }
+
+---@class NotificationItem
+---@field ecol integer
+---@field scol integer
+---@field text string
+---@field hl   string[]
 
 --- A tuple consisting of some text and a stack of highlights.
 ---@class NotificationToken : {[1]: string, [2]: string[]}
@@ -177,7 +198,7 @@ end
 ---@return Token[]
 local function Tokenize(source)
   local pos = 0
-  local tab = 1
+  local tab = 0
   local res = {}
   local len = vim.fn.strchars(source)
 
@@ -227,7 +248,7 @@ end
 
 --- Pack a notification token inside margin and returns a notification line.
 ---
----@param ... NotificationToken
+---@param ... NotificationToken|NotificationItem
 ---@return NotificationLine
 local function Line(...)
   if select("#", ...) == 0 then
@@ -255,14 +276,13 @@ local function Annote(line, width, annote, sep, first)
   if first then
     annote[1] = sep .. annote[1]
     table.insert(line, annote)
-
     width = width + line_width(annote[1])
   else
     -- Indent messages longer than a single line (see notification.view.align)
     if M.options.align == "message" then
       local len = vim.fn.strwidth(annote[1])
-      table.insert(line, Token(string.rep(sep, len)))
-
+      local pad = Token(string.rep(sep, len))
+      table.insert(line, pad)
       width = width + len
     end
   end
@@ -363,7 +383,7 @@ function M.render_group_separator()
   if not line then
     return nil, 0
   end
-  return { Line(Token(line, M.options.group_separator_hl)) }, line_width(line)
+  return { hdr = Line(Token(line, M.options.group_separator_hl)) }, line_width(line)
 end
 
 --- Render the header of a group, containing group name and icon.
@@ -396,16 +416,16 @@ function M.render_group_header(now, group)
     local sep_tok = Token(M.options.icon_separator)
     local width = line_width(group_name, group_icon, M.options.icon_separator)
     if group.config.icon_on_left then
-      return { Line(icon_tok, sep_tok, name_tok) }, width
+      return { hdr = Line(icon_tok, sep_tok, name_tok) }, width
     else
-      return { Line(name_tok, sep_tok, icon_tok) }, width
+      return { hdr = Line(name_tok, sep_tok, icon_tok) }, width
     end
   elseif name_tok then
     ---@cast group_name string
-    return { Line(name_tok) }, line_width(group_name)
+    return { hdr = Line(name_tok) }, line_width(group_name)
   elseif icon_tok then
     ---@cast group_icon string
-    return { Line(icon_tok) }, line_width(group_icon)
+    return { hdr = Line(icon_tok) }, line_width(group_icon)
   else
     -- No group header to render
     return nil, 0
@@ -434,8 +454,8 @@ end
 ---@param item   Item
 ---@param config Config
 ---@param count  number
----@return NotificationLine[]|nil lines
----@return integer                max_width
+---@return NotificationItems[]|nil lines
+---@return integer                 width
 function M.render_item(item, config, count)
   if item.hidden then
     return nil, 0
@@ -466,6 +486,7 @@ function M.render_item(item, config, count)
   -- We have to keep track of extra lines added in tokens to not cause a desync with hls
   local extra_line = 0
 
+  ---@type NotificationItem[]|NotificationToken[]
   local tokens = {}
   local annote = item.annote and Token(item.annote, item.style)
   local sep = config.annote_separator or " "
@@ -499,6 +520,7 @@ function M.render_item(item, config, count)
         line = {}
       end
 
+      ---@type NotificationItem
       local word = {
         scol = token[1] - next_start,
         ecol = token[2] - next_start + 1,
@@ -549,15 +571,14 @@ function M.render_item(item, config, count)
   if #tokens == 0 and annote then
     tokens = { Line(annote) }
   end
-  return tokens, width
+  return { line = tokens }, width
 end
 
 --- Render notifications into lines and highlights.
 ---
 ---@param now number timestamp of current render frame
 ---@param groups Group[]
----@return NotificationLine[] lines
----@return integer width
+---@return Notification
 function M.render(now, groups)
   is_multigrid_ui = M.check_multigrid_ui()
 
@@ -593,25 +614,27 @@ function M.render(now, groups)
       end
     end
 
-    local icon = group.config.icon
-    if type(icon) == "function" then
-      icon = group.config.icon(now, group.items)
-    end
-    local hdr, hdr_width
-    if cache.group_header
-        and not resized
-        and cache.group_header[group.config.name]
-        and cache.group_header[group.config.name].icon == icon
-    then
-      hdr = cache.group_header[group.config.name].hdr
-      hdr_width = cache.group_header[group.config.name].width
-    else
-      hdr, hdr_width = M.render_group_header(now, group)
-      cache.group_header[group.config.name] = { hdr = hdr, width = hdr_width, icon = icon }
-    end
-    if hdr then
-      table.insert(chunks, hdr)
-      max_width = math.max(max_width, hdr_width)
+    if group.config.name then
+      local icon = group.config.icon
+      if type(icon) == "function" then
+        icon = group.config.icon(now, group.items)
+      end
+      local hdr, hdr_width
+      if cache.group_header
+          and not resized
+          and cache.group_header[group.config.name]
+          and cache.group_header[group.config.name].icon == icon
+      then
+        hdr = cache.group_header[group.config.name].hdr
+        hdr_width = cache.group_header[group.config.name].width
+      else
+        hdr, hdr_width = M.render_group_header(now, group)
+        cache.group_header[group.config.name] = { hdr = hdr, width = hdr_width, icon = icon }
+      end
+      if hdr then
+        table.insert(chunks, hdr)
+        max_width = math.max(max_width, hdr_width)
+      end
     end
 
     local items, counts = M.dedup_items(group.items)
@@ -649,13 +672,25 @@ function M.render(now, groups)
     start, stop, step = 1, #chunks, 1
   end
 
+  local rows = 0
   local lines = {}
   for i = start, stop, step do
-    for _, line in ipairs(chunks[i]) do
-      table.insert(lines, line)
+    ---@cast chunks NotificationLine
+    if chunks[i] and (chunks[i].hdr or chunks[i].line) then
+      rows = rows + (chunks[i].hdr and 1 or 0) + (chunks[i].line and #chunks[i].line or 0)
+      table.insert(lines, chunks[i])
     end
   end
-  return lines, max_width
+  ---@type Notification
+  return {
+    rows = rows,
+    lines = lines,
+    width = max_width,
+    ---@type NotificationOpts
+    opts = {
+      upwards = M.options.stack_upwards,
+    }
+  }
 end
 
 --- Display notification items in Neovim messages.
