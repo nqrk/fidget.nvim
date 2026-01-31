@@ -570,24 +570,32 @@ end
 ---@param ns    integer
 ---@param row   integer
 ---@param text  any[]
+---@param pos   string
 ---@param width integer
-local function set_extmark(buf, ns, row, text, width)
+local function set_extmark(buf, ns, row, text, pos, width)
   if vim.fn.has("nvim-0.11.0") == 1 then
     vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
       virt_text = text,
-      virt_text_pos = "eol_right_align"
+      virt_text_pos = pos == "left" and "eol" or "eol_right_align"
     })
   else
+    local left = pos == "left"
     -- pre-0.11.0: eol_right_align was only introduced in 0.11.0;
     -- without it we need to compute and add the padding ourselves
-    local len, padded = 0, { {} }
+    local len = 0
+    local padded = left and {} or { {} }
     for _, tok in ipairs(text) do
       len = len + vim.fn.strwidth(tok[1]) + vim.fn.count(tok[1], "\t") * math.max(0, M.options.tabstop - 1)
       table.insert(padded, tok)
     end
     local pad_width = math.max(0, width - len)
     if pad_width > 0 then
-      padded[1] = { string.rep(" ", pad_width), {} }
+      local pad = string.rep(" ", pad_width)
+      if left then
+        table.insert(padded, { pad, {} })
+      else
+        padded[1] = { pad, {} }
+      end
     else
       padded = text
     end
@@ -620,6 +628,7 @@ function M.set_lines(message)
   for _, body in ipairs(message.lines) do
     local chunk = {}
 
+    ---@cast body NotificationItems
     if body.line then
       for _, token in ipairs(body.line) do
         chunk = {}
@@ -636,14 +645,15 @@ function M.set_lines(message)
             table.insert(chunk, t) -- backward compatibility
           end
         end
-        set_extmark(buffer_id, namespace_id, row, chunk, message.width)
+        set_extmark(buffer_id, namespace_id, row, chunk, message.opts.position, message.width)
         row = row + 1
       end
     else
+      ---@cast body NotificationTokens
       for _, hdr in ipairs(body.hdr) do
         table.insert(chunk, hdr)
       end
-      set_extmark(buffer_id, namespace_id, row, chunk, message.width)
+      set_extmark(buffer_id, namespace_id, row, chunk, message.opts.position, message.width)
       row = row + 1
     end
   end

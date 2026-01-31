@@ -16,6 +16,7 @@ local cache = require("fidget.notification.model").cache()
 
 ---@class NotificationOpts
 ---@field upwards  boolean display from bottom to top
+---@field position string  virtual text position
 
 --- A list of highlighted tokens.
 ---@alias NotificationLine NotificationTokens[]|NotificationItems[]
@@ -46,6 +47,11 @@ M.options = {
   ---
   ---@type boolean
   stack_upwards = true,
+
+  --- Position of the text inside the window
+  ---
+  ---@type "left"|"right"
+  text_position = "right",
 
   --- Automatically highlight notification using tree-sitter
   ---
@@ -267,22 +273,31 @@ end
 ---@param width  integer
 ---@param annote NotificationToken
 ---@param first  boolean
+---@param left   boolean
 ---@return table   line
 ---@return integer width
-local function Annote(line, width, annote, sep, first)
+local function Annote(line, width, annote, sep, first, left)
   if not annote then
     return line, width
   end
   if first then
-    annote[1] = sep .. annote[1]
-    table.insert(line, annote)
+    annote[1] = left and annote[1] .. sep or sep .. annote[1]
+    if left then
+      line = { annote, unpack(line) }
+    else
+      table.insert(line, annote)
+    end
     width = width + line_width(annote[1])
   else
     -- Indent messages longer than a single line (see notification.view.align)
     if M.options.align == "message" then
       local len = vim.fn.strwidth(annote[1])
       local pad = Token(string.rep(sep, len))
-      table.insert(line, pad)
+      if left then
+        line = { pad, unpack(line) }
+      else
+        table.insert(line, pad)
+      end
       width = width + len
     end
   end
@@ -489,6 +504,7 @@ function M.render_item(item, config, count)
   ---@type NotificationItem[]|NotificationToken[]
   local tokens = {}
   local annote = item.annote and Token(item.annote, item.style)
+  local left = M.options.text_position == "left"
   local sep = config.annote_separator or " "
 
   local width = 0
@@ -511,7 +527,7 @@ function M.render_item(item, config, count)
       -- Check if the line would overflow notification window if added as it is
       if line_ptr + strlen + spacing >= max_width - (annote and line_width(annote[1]) or 0) then
         if annote then
-          line, width = Annote(line, width, annote, sep, #tokens == 0)
+          line, width = Annote(line, width, annote, sep, #tokens == 0, left)
         end
         table.insert(tokens, Line(unpack(line))) -- push to newline
         next_start = token[1]
@@ -563,7 +579,7 @@ function M.render_item(item, config, count)
       width = math.max(width, line_ptr + line_margin())
     end
     if annote then
-      line, width = Annote(line, width, annote, sep, #tokens == 0)
+      line, width = Annote(line, width, annote, sep, #tokens == 0, left)
     end
     table.insert(tokens, Line(unpack(line)))
   end
@@ -689,6 +705,7 @@ function M.render(now, groups)
     ---@type NotificationOpts
     opts = {
       upwards = M.options.stack_upwards,
+      position = M.options.text_position,
     }
   }
 end

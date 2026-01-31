@@ -268,6 +268,7 @@ function M.run()
   logger.debug("-- test --")
 
   -- notif.view.options.stack_upwards = true
+  -- notif.view.options.text_position = "left"
   -- notif.view.options.line_margin = 8
   -- notif.default_config.ttl = 500
 
