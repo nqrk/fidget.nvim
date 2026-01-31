@@ -122,6 +122,7 @@ local function long_line_msg()
 end
 
 -- a notification window, single line overflow split in multi lines, left aligned
+-- respect max_width with no overflow when resized
 local function long_line_msg_left()
   notif.notify(str.long_line_msg, nil, { position = "left" })
 end

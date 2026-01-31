@@ -615,7 +615,7 @@ function M.render(now, groups)
   cache.group_header = cache.group_header or {}
   cache.render_item = cache.render_item or {}
 
-  local size = vim.opt.columns:get()
+  local size = window_max()
 
   -- Force rendering when the length of the window change
   local resized = cache.render_width and cache.render_width ~= size or false
